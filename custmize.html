@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ninja Skin Customizer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #0a0a0a;
+            color: #00ffff;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid #00ffff;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+            width: 100%;
+            max-width: 400px;
+        }
+        h2 { text-align: center; letter-spacing: 2px; text-transform: uppercase; }
+        .option {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        label { font-size: 14px; font-weight: bold; }
+        input[type="color"] {
+            border: none;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            background: none;
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #00ffff;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 10px;
+        }
+        .btn:active { transform: scale(0.95); background: #ff00ff; }
+        #status { text-align: center; font-size: 12px; margin-top: 10px; color: #555; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Skin Editor</h2>
+        <hr style="border: 0.5px solid #333; margin-bottom: 20px;">
+
+        <div class="option">
+            <label>BODY SKIN</label>
+            <input type="color" id="skinColor" value="#050505">
+        </div>
+
+        <div class="option">
+            <label>FIRE & EYES GLOW</label>
+            <input type="color" id="neonColor" value="#00ffff">
+        </div>
+
+        <button class="btn" onclick="updateSkin()">APPLY CHANGES</button>
+        <p id="status">Syncing with Firebase...</p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // Same Config as Lobby
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1gnwY8WzLbbAX2ROsJ7gJXrNOZEiecpE",
+            databaseURL: "https://blogtestenviroment-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "blogtestenviroment",
+            appId: "1:26504116566:web:63ca512dac2126a6b1fef7"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        window.updateSkin = function() {
+            const skinVal = document.getElementById('skinColor').value;
+            const neonVal = document.getElementById('neonColor').value;
+
+            // Hex to Decimal (Three.js supports hex directly, but let's keep it clean)
+            const skinHex = parseInt(skinVal.replace('#', '0x'));
+            const neonHex = parseInt(neonVal.replace('#', '0x'));
+
+            const status = document.getElementById('status');
+            status.innerText = "Uploading...";
+
+            // Update Firebase
+            set(ref(db, 'player/outfit'), {
+                skin: skinHex,
+                eyes: neonHex
+            }).then(() => {
+                status.innerText = "Update Successful! Check Lobby.";
+                status.style.color = "#00ff00";
+                setTimeout(() => { status.innerText = "Syncing with Firebase..."; status.style.color = "#555"; }, 2000);
+            }).catch((error) => {
+                status.innerText = "Error: " + error.message;
+                status.style.color = "#ff0000";
+            });
+        }
+    </script>
+</body>
+</html>
