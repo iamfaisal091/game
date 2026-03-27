@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Neon Ninja Pro Lobby</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            overflow: hidden; 
+            background: #000 url('https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjmCQYPcaaAS-4bAgsUX7xfixWXMQHCoOF5xb98UaY2-_mjIK6KvIzGnnqy7GTacldnk2KX0EVPvfYAzCepUsMYgWALxLLo8mAy_EmMJumfmFLL-uU4dL4iHmMKRkB6ntXvNNU5ECzrzcyzZisz5NkGMNA0BUsXUsKnaDTZeHFce8wWvdT95w_JxVh5hSk/s1280/1000131370.jpg') no-repeat center center fixed;
+            background-size: cover;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        canvas { display: block; }
+
+        #ui-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 30; pointer-events: none;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: white; text-align: center;
+        }
+        #title { font-size: 52px; color: #00ffff; text-shadow: 0 0 30px #00ffff; margin-bottom: 10px; }
+        #status { font-size: 20px; color: #ff00ff; margin: 20px 0 40px 0; text-shadow: 0 0 15px #ff00ff; }
+        button {
+            pointer-events: auto; padding: 16px 55px; margin: 12px; font-size: 22px;
+            font-weight: bold; border: none; border-radius: 50px; cursor: pointer;
+            box-shadow: 0 0 25px currentColor; transition: all 0.3s;
+        }
+        #signin-btn { background: #4285f4; color: white; }
+        #start-game-btn { 
+            background: linear-gradient(#00ff88, #00cc66); 
+            color: #000; 
+            display: none; 
+        }
+        button:hover { transform: scale(1.08); }
+    </style>
+</head>
+<body>
+
+    <div id="ui-overlay">
+        <div id="title">NEON NINJA</div>
+        <div id="status">Loading Character...</div>
+        
+        <button id="signin-btn">SIGN IN WITH GOOGLE</button>
+        <button id="start-game-btn">START GAME</button>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1gnwY8WzLbbAX2ROsJ7gJXrNOZEiecpE",
+            authDomain: "blogtestenviroment.firebaseapp.com",
+            databaseURL: "https://blogtestenviroment-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "blogtestenviroment",
+            appId: "1:26504116566:web:63ca512dac2126a6b1fef7"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        let scene, camera, renderer, charGroup;
+        let materials = {}, eyes = [], mouth;
+        let fireParticles = [], fireSystem = []; 
+        let clock = new THREE.Clock();
+
+        let playerId = null;
+        let playerName = "";
+
+        const signinBtn = document.getElementById('signin-btn');
+        const startBtn = document.getElementById('start-game-btn');
+        const statusText = document.getElementById('status');
+
+        // ==================== CHARACTER INIT ====================
+        function initCharacter() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 1.2, 5);
+            camera.lookAt(0, 1.2, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(50, 50),
+                new THREE.MeshStandardMaterial({ color: 0x111111 })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            scene.add(ground);
+
+            charGroup = new THREE.Group();
+
+            materials.skin = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.4, metalness: 0.6 });
+            materials.neonEyes = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+            materials.pinkFist = new THREE.MeshStandardMaterial({ color: 0xff00ff, emissive: 0xff00ff, emissiveIntensity: 3 });
+            materials.blueFire = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.7 });
+
+            // Torso + Head + Eyes + Mouth + Arms + Legs (same as previous working version)
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.18, 0.8, 32), materials.skin);
+            torso.position.y = 1.2; charGroup.add(torso);
+
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 32, 32), materials.skin);
+            head.position.y = 1.75; charGroup.add(head);
+
+            const eyeGeo = new THREE.PlaneGeometry(0.06, 0.02);
+            const lEye = new THREE.Mesh(eyeGeo, materials.neonEyes);
+            lEye.position.set(-0.06, 1.78, 0.17); charGroup.add(lEye);
+            const rEye = lEye.clone(); rEye.position.x = 0.06; charGroup.add(rEye);
+            eyes = [lEye, rEye];
+
+            mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.01), materials.neonEyes);
+            mouth.position.set(0, 1.65, 0.18); charGroup.add(mouth);
+
+            const createArm = (side) => {
+                const g = new THREE.Group();
+                const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.45), materials.skin);
+                arm.position.set(side * 0.28, 1.25, 0); arm.rotation.z = side * 0.25; g.add(arm);
+                const fist = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), materials.pinkFist);
+                fist.position.set(side * 0.35, 0.95, 0); g.add(fist);
+                const fSource = new THREE.Object3D();
+                fSource.position.set(side * 0.35, 0.95, 0);
+                charGroup.add(fSource);
+                fireSystem.push({ source: fSource });
+                return g;
+            };
+            charGroup.add(createArm(1), createArm(-1));
+
+            const createLeg = (side) => {
+                const g = new THREE.Group();
+                const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.8), materials.skin);
+                leg.position.set(side * 0.13, 0.55, 0); g.add(leg);
+                const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.3), materials.neonEyes);
+                shoe.position.set(side * 0.13, 0.05, 0.05); g.add(shoe);
+                return g;
+            };
+            charGroup.add(createLeg(1), createLeg(-1));
+
+            scene.add(charGroup);
+
+            // Fire Particles
+            for (let i = 0; i < 120; i++) {
+                const p = new THREE.Mesh(new THREE.IcosahedronGeometry(0.025), materials.blueFire.clone());
+                scene.add(p);
+                fireParticles.push({
+                    mesh: p,
+                    owner: i < 60 ? 0 : 1,
+                    angle: Math.random() * Math.PI * 2,
+                    radius: 0.15,
+                    speed: 0.05
+                });
+            }
+
+            statusText.textContent = "Character Loaded!";
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const t = clock.getElapsedTime();
+
+            fireParticles.forEach(p => {
+                const fPos = new THREE.Vector3();
+                fireSystem[p.owner].source.getWorldPosition(fPos);
+                p.angle += p.speed;
+                p.mesh.position.x = fPos.x + Math.cos(p.angle) * p.radius;
+                p.mesh.position.y = fPos.y + Math.sin(t * 5 + p.angle) * 0.15;
+                p.mesh.position.z = fPos.z + Math.sin(p.angle) * p.radius * 0.8;
+            });
+
+            eyes.forEach(e => e.scale.y = (Math.sin(t * 2.8) > 0.95) ? 0.1 : 1);
+
+            renderer.render(scene, camera);
+        }
+
+        // Auto Login Check + Persistence
+        async function checkAuth() {
+            try {
+                const { getAuth, onAuthStateChanged } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js");
+                const auth = getAuth();
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        playerId = user.uid;
+                        playerName = user.displayName || "NeonNinja";
+                        statusText.textContent = `Welcome back, ${playerName.split(" ")[0]}!`;
+                        signinBtn.style.display = 'none';
+                        startBtn.style.display = 'block';
+                    } else {
+                        statusText.textContent = "Sign in to continue";
+                        signinBtn.style.display = 'block';
+                    }
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // Sign In Button
+        signinBtn.addEventListener('click', async () => {
+            statusText.textContent = "Opening Google Sign-in...";
+            signinBtn.disabled = true;
+
+            try {
+                const { getAuth, GoogleAuthProvider, signInWithPopup } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js");
+                const auth = getAuth();
+                const provider = new GoogleAuthProvider();
+
+                await signInWithPopup(auth, provider);
+                // onAuthStateChanged automatically handle karega
+            } catch (error) {
+                console.error(error);
+                statusText.textContent = "Login failed. Try again.";
+                signinBtn.disabled = false;
+            }
+        });
+
+        startBtn.addEventListener('click', () => {
+            if (!playerId) {
+                alert("Please sign in first!");
+                return;
+            }
+            window.location.href = 'index.html';
+        });
+
+        // Initialize
+        initCharacter();
+        animate();
+        checkAuth();           // ← Yeh important hai (Auto login check)
+
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+    </script>
+</body>
+</html>
